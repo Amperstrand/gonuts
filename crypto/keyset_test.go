@@ -112,3 +112,78 @@ func TestDeriveKeysetId(t *testing.T) {
 
 	}
 }
+
+func TestDeriveKeysetIdV2(t *testing.T) {
+	tests := []struct {
+		name             string
+		pubkeys          map[uint64]string
+		unit             string
+		inputFeePpk      uint
+		expectedKeysetId string
+	}{
+		{
+			name: "4 keys, sat, fee=0 (omitted)",
+			pubkeys: map[uint64]string{
+				1: "03a40f20667ed53513075dc51e715ff2046cad64eb68960632269ba7f0210e38bc",
+				2: "03fd4ce5a16b65576145949e6f99f445f8249fee17c606b688b504a849cdc452de",
+				4: "02648eccfa4c026960966276fa5a4cae46ce0fd432211a4f449bf84f13aa5f8303",
+				8: "02fdfd6796bfeac490cbee12f778f867f0a2c68f6508d17c649759ea0dc3547528",
+			},
+			unit:             "sat",
+			inputFeePpk:      0,
+			expectedKeysetId: "017c9dcbfd501d516ba53f583a27ee3a32d8c8f50772ce126d2c283f01024267ae",
+		},
+		{
+			name: "4 keys, sat, fee=10",
+			pubkeys: map[uint64]string{
+				1: "03a40f20667ed53513075dc51e715ff2046cad64eb68960632269ba7f0210e38bc",
+				2: "03fd4ce5a16b65576145949e6f99f445f8249fee17c606b688b504a849cdc452de",
+				4: "02648eccfa4c026960966276fa5a4cae46ce0fd432211a4f449bf84f13aa5f8303",
+				8: "02fdfd6796bfeac490cbee12f778f867f0a2c68f6508d17c649759ea0dc3547528",
+			},
+			unit:             "sat",
+			inputFeePpk:      10,
+			expectedKeysetId: "01aa0a530ef4323d4f5e3a28fe91948852682df38cece08d294238a90e680e3db5",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			keys := make(map[uint64]*secp256k1.PublicKey)
+			for amount, pubkey := range test.pubkeys {
+				pubkeyBytes, _ := hex.DecodeString(pubkey)
+				publicKey, err := secp256k1.ParsePubKey(pubkeyBytes)
+				if err != nil {
+					t.Fatalf("error parsing pub key: %v", err)
+				}
+				keys[amount] = publicKey
+			}
+
+			id := DeriveKeysetIdV2(keys, test.unit, test.inputFeePpk)
+			if id != test.expectedKeysetId {
+				t.Errorf("expected '%v' but got '%v'", test.expectedKeysetId, id)
+			}
+		})
+	}
+}
+
+func TestIsKeysetIdV2(t *testing.T) {
+	tests := []struct {
+		id       string
+		expected bool
+	}{
+		{"00456a94ab4e1c46", false},
+		{"000f01df73ea149a", false},
+		{"017c9dcbfd501d516ba53f583a27ee3a32d8c8f50772ce126d2c283f01024267ae", true},
+		{"01aa0a530ef4323d4f5e3a28fe91948852682df38cece08d294238a90e680e3db5", true},
+		{"", false},
+		{"0", false},
+	}
+
+	for _, test := range tests {
+		result := IsKeysetIdV2(test.id)
+		if result != test.expected {
+			t.Errorf("IsKeysetIdV2(%q) = %v, want %v", test.id, result, test.expected)
+		}
+	}
+}

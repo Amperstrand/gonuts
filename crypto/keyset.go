@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
 	"sort"
 
@@ -121,6 +122,38 @@ func DeriveKeysetId(keyset map[uint64]*secp256k1.PublicKey) string {
 	hash.Write(keys)
 
 	return "00" + hex.EncodeToString(hash.Sum(nil))[:14]
+}
+
+func IsKeysetIdV2(id string) bool {
+	return len(id) == 66 && (id[:2] == "01" || id[:2] == "02")
+}
+
+func DeriveKeysetIdV2(keyset map[uint64]*secp256k1.PublicKey, unit string, inputFeePpk uint) string {
+	type pubkey struct {
+		amount uint64
+		pk     *secp256k1.PublicKey
+	}
+	pubkeys := make([]pubkey, len(keyset))
+	i := 0
+	for amount, key := range keyset {
+		pubkeys[i] = pubkey{amount, key}
+		i++
+	}
+	sort.Slice(pubkeys, func(i, j int) bool {
+		return pubkeys[i].amount < pubkeys[j].amount
+	})
+
+	var preimage string
+	for _, key := range pubkeys {
+		preimage += fmt.Sprintf("%d:%x,", key.amount, key.pk.SerializeCompressed())
+	}
+	preimage += fmt.Sprintf("unit:%s", unit)
+	if inputFeePpk > 0 {
+		preimage += fmt.Sprintf("|input_fee_ppk:%d", inputFeePpk)
+	}
+
+	hash := sha256.Sum256([]byte(preimage))
+	return "01" + hex.EncodeToString(hash[:])
 }
 
 // DerivePublic returns the keyset's public keys as

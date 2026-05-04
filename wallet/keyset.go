@@ -78,12 +78,40 @@ func GetKeysetKeys(mintURL, id string) (map[uint64]*secp256k1.PublicKey, error) 
 			return nil, err
 		}
 	}
-	derivedId := crypto.DeriveKeysetId(keys)
+
+	var derivedId string
+	if crypto.IsKeysetIdV2(id) {
+		metadata, err := getKeysetMetadata(mintURL, id)
+		if err != nil {
+			return nil, fmt.Errorf("error getting keyset metadata for V2: %v", err)
+		}
+		derivedId = crypto.DeriveKeysetIdV2(keys, metadata.unit, metadata.inputFeePpk)
+	} else {
+		derivedId = crypto.DeriveKeysetId(keys)
+	}
 	if id != derivedId {
 		return nil, fmt.Errorf("Got invalid keyset. Derived id: '%v' but got '%v' from mint", derivedId, keysetsResponse.Keysets[0].Id)
 	}
 
 	return keys, nil
+}
+
+type keysetMetadata struct {
+	unit        string
+	inputFeePpk uint
+}
+
+func getKeysetMetadata(mintURL, id string) (*keysetMetadata, error) {
+	keysetsResponse, err := client.GetAllKeysets(mintURL)
+	if err != nil {
+		return nil, err
+	}
+	for _, ks := range keysetsResponse.Keysets {
+		if ks.Id == id {
+			return &keysetMetadata{unit: ks.Unit, inputFeePpk: ks.InputFeePpk}, nil
+		}
+	}
+	return nil, fmt.Errorf("keyset %s not found in keysets response", id)
 }
 
 // getActiveKeyset returns the active keyset for the mint passed.
